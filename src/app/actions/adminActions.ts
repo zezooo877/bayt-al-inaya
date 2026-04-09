@@ -5,7 +5,11 @@ import { Product, SupabaseProductResponse } from '@/types';
 
 export async function adminGetProductsAction() {
   const supabaseAdmin = getSupabaseAdmin();
-  if (!supabaseAdmin) return [] as Product[];
+  if (!supabaseAdmin) {
+    // We return empty but the frontend will check a status property if we had one.
+    // For now, let's keep it consistent but improve the catch in the dashboard.
+    return [] as Product[];
+  }
   
   const { data, error } = await supabaseAdmin
     .from('products')
@@ -16,7 +20,7 @@ export async function adminGetProductsAction() {
     `)
     .order('created_at', { ascending: false });
 
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`Database Error: ${error.message}`);
 
   return ((data as unknown) as SupabaseProductResponse[] || []).map((item) => ({
     ...item,
@@ -27,9 +31,25 @@ export async function adminGetProductsAction() {
 
 export async function adminUpsertProductAction(product: Partial<Product>, imageFiles: string[]) {
   const supabaseAdmin = getSupabaseAdmin();
-  if (!supabaseAdmin) throw new Error('Supabase client not initialized');
+  if (!supabaseAdmin) {
+    throw new Error('فشل الاتصال بقاعدة البيانات الإدارية. يرجى التأكد من إضافة SUPABASE_SERVICE_ROLE_KEY في إعدادات Vercel.');
+  }
   
   const { id, name, description, price, discount, category_id, in_stock, slug } = product;
+
+  // Better slug generation for Arabic and English
+  // 1. Remove special characters except spaces and alphanumeric
+  // 2. Replace spaces with dashes
+  // 3. Limit length
+  const generatedSlug = slug || name
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^\u0600-\u06FFa-z0-9\s-]/g, '') // Keep Arabic, English, Numbers, Spaces, Dashes
+    .replace(/\s+/g, '-')                      // Spaces to dashes
+    .replace(/-+/g, '-')                       // Double dashes to single
+    .slice(0, 50);
+
+  if (!generatedSlug) throw new Error('يرجى إدخال اسم صحيح للمنتج لتوليد رابط صالح.');
 
   // 1. Upsert product
   const { data: prodData, error: prodError } = await supabaseAdmin
@@ -42,12 +62,16 @@ export async function adminUpsertProductAction(product: Partial<Product>, imageF
       discount,
       category_id,
       in_stock,
-      slug: slug || name?.toLowerCase().replace(/[\s\W]+/g, '-')
+      slug: generatedSlug
     })
     .select()
     .single();
 
-  if (prodError) throw new Error(prodError.message);
+  if (prodError) {
+    console.error('Upsert Error:', prodError);
+    if (prodError.code === '23505') throw new Error('هذا المنتج موجود بالفعل أو الرابط مستخدم لمنتج آخر.');
+    throw new Error(`خطأ في حفظ المنتج: ${prodError.message}`);
+  }
 
   // 2. Handle images
   if (prodData && imageFiles.length > 0) {
@@ -59,7 +83,7 @@ export async function adminUpsertProductAction(product: Partial<Product>, imageF
     }));
 
     const { error: imgError } = await supabaseAdmin.from('product_images').insert(imageData);
-    if (imgError) throw new Error(imgError.message);
+    if (imgError) throw new Error(`خطأ في حفظ الصور: ${imgError.message}`);
   }
 
   return prodData;

@@ -11,7 +11,7 @@ import {
 } from '@/app/actions/adminActions';
 import { getCategories } from '@/services/productService';
 import { Product, Category } from '@/types';
-import { Trash2, Edit, Plus, Check, X, Loader2 } from 'lucide-react';
+import { Trash2, Edit, Plus, Check, X, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 
@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [isConfigError, setIsConfigError] = useState(false);
 
   // Form State
   const [name, setName] = useState('');
@@ -36,17 +37,23 @@ export default function AdminDashboard() {
     try {
       const cats = await getCategories();
       setCategories(cats);
+      
       const prods = await adminGetProductsAction();
       setProducts(prods);
-    } catch (err) {
+      
+      // If we have categories but prods fails or returns empty unexpectedly, 
+      // check if it's a config issue (though adminGetProductsAction returns [] on null client)
+      if (cats.length === 0) {
+        setIsConfigError(true);
+      }
+    } catch (err: unknown) {
       console.error(err);
-      alert('خطأ في تحميل البيانات. تأكد من إعدادات Supabase.');
+      setIsConfigError(true);
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    // defer state update to break synchronous effect cycle
     const timeout = setTimeout(() => {
       loadData();
     }, 0);
@@ -67,6 +74,10 @@ export default function AdminDashboard() {
   };
 
   const handleOpenNew = () => {
+    if (categories.length === 0) {
+      alert('لا يمكن إضافة منتج بدون فئات. يرجى التأكد من ربط قاعدة البيانات بشكل صحيح.');
+      return;
+    }
     setEditingProduct(null);
     setName('');
     setPrice('');
@@ -79,14 +90,19 @@ export default function AdminDashboard() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!categoryId) {
+      alert('يرجى اختيار فئة للمنتج.');
+      return;
+    }
+
     setFormLoading(true);
     try {
       const validImages = images.filter(url => url.trim() !== '');
       await adminUpsertProductAction({
         id: editingProduct?.id,
         name,
-        price: parseFloat(price),
-        discount: parseFloat(discount),
+        price: parseFloat(price) || 0,
+        discount: parseFloat(discount) || 0,
         category_id: categoryId,
         description,
         in_stock: editingProduct ? editingProduct.in_stock : true,
@@ -94,9 +110,10 @@ export default function AdminDashboard() {
       
       setIsFormOpen(false);
       loadData();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      alert('خطأ في حفظ المنتج.');
+      const errorMsg = err instanceof Error ? err.message : 'خطأ غير معروف في حفظ المنتج.';
+      alert(errorMsg);
     }
     setFormLoading(false);
   };
@@ -131,12 +148,43 @@ export default function AdminDashboard() {
 
   return (
     <div className="container" style={{ padding: '2rem 1.5rem', direction: 'rtl' }}>
+      {isConfigError && (
+        <div style={{ 
+          background: '#fff3cd', 
+          border: '1px solid #ffeeba', 
+          color: '#856404', 
+          padding: '1.5rem', 
+          borderRadius: '12px', 
+          marginBottom: '2rem',
+          display: 'flex',
+          gap: '1rem'
+        }}>
+          <AlertTriangle size={36} />
+          <div>
+            <h3 style={{ fontWeight: 800, marginBottom: '0.25rem' }}>تنبيه بخصوص الربط (Hosting)</h3>
+            <p style={{ fontSize: '0.9rem' }}>
+              يبدو أن لوحة التحكم غير مرتبطة بقاعدة البيانات بشكل كامل. إذا كنت تستخدم Vercel، يرجى التأكد من إضافة مفتاح 
+              <code style={{ background: 'rgba(0,0,0,0.1)', padding: '2px 4px', borderRadius: '4px', margin: '0 4px' }}>SUPABASE_SERVICE_ROLE_KEY</code> 
+              في إعدادات المشروع.
+            </p>
+            <a 
+              href="https://vercel.com/dashboard" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '0.5rem', fontSize: '0.85rem', fontWeight: 700, textDecoration: 'underline' }}
+            >
+              فتح لوحة تحكم Vercel <ExternalLink size={14} />
+            </a>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center" style={{ marginBottom: '2rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 900 }}>لوحة الإدارة | بيت العناية</h1>
           <p style={{ color: 'var(--text-muted)' }}>إدارة المنتجات والمخزون</p>
         </div>
-        <button className="btn btn-primary" onClick={handleOpenNew}>
+        <button className="btn btn-primary" onClick={handleOpenNew} disabled={isConfigError}>
           <Plus size={20} />
           إضافة منتج جديد
         </button>
@@ -155,7 +203,11 @@ export default function AdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
+            {products.length === 0 && !isConfigError ? (
+              <tr>
+                <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>لا توجد منتجات مضافة بعد.</td>
+              </tr>
+            ) : products.map((p) => (
               <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '1rem' }}>
                   <div className="flex items-center gap-3">
@@ -236,6 +288,7 @@ export default function AdminDashboard() {
                 <div className="flex flex-col gap-1">
                   <label style={{ fontSize: '0.9rem', fontWeight: 600 }}>الفئة</label>
                   <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={{ padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', outline: 'none' }}>
+                    <option value="">اختر الفئة</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name_ar}</option>)}
                   </select>
                 </div>
