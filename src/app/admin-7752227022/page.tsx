@@ -7,7 +7,8 @@ import {
   adminGetProductsAction, 
   adminUpsertProductAction, 
   adminDeleteProductAction, 
-  adminToggleStockAction 
+  adminToggleStockAction,
+  adminCheckConfigAction
 } from '@/app/actions/adminActions';
 import { getCategories } from '@/services/productService';
 import { Product, Category } from '@/types';
@@ -35,23 +36,21 @@ export default function AdminDashboard() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const isConfigValid = await adminCheckConfigAction();
+      setIsConfigError(!isConfigValid);
+
       const cats = await getCategories();
       setCategories(cats);
       
       const prods = await adminGetProductsAction();
       setProducts(prods);
-      
-      // If we have categories but prods fails or returns empty unexpectedly, 
-      // check if it's a config issue (though adminGetProductsAction returns [] on null client)
-      if (cats.length === 0) {
-        setIsConfigError(true);
-      }
     } catch (err: unknown) {
       console.error(err);
-      setIsConfigError(true);
+      // Only set error if we couldn't even check config
+      if (typeof isConfigError === 'undefined') setIsConfigError(true);
     }
     setLoading(false);
-  }, []);
+  }, [isConfigError]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {

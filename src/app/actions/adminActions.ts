@@ -3,6 +3,11 @@
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { Product, SupabaseProductResponse } from '@/types';
 
+export async function adminCheckConfigAction() {
+  const supabaseAdmin = getSupabaseAdmin();
+  return !!supabaseAdmin;
+}
+
 export async function adminGetProductsAction() {
   const supabaseAdmin = getSupabaseAdmin();
   if (!supabaseAdmin) {
