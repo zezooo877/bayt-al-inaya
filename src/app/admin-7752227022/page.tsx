@@ -33,11 +33,14 @@ export default function AdminDashboard() {
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<string[]>(['', '', '', '']); // 4 image slots
 
+  const [configStatus, setConfigStatus] = useState({ url: true, anon: true, service: true });
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const isConfigValid = await adminCheckConfigAction();
-      setIsConfigError(!isConfigValid);
+      const status = await adminCheckConfigAction();
+      setConfigStatus(status);
+      setIsConfigError(!status.url || !status.anon || !status.service);
 
       const cats = await getCategories();
       setCategories(cats);
@@ -46,7 +49,6 @@ export default function AdminDashboard() {
       setProducts(prods);
     } catch (err: unknown) {
       console.error(err);
-      // Only set error if we couldn't even check config
       if (typeof isConfigError === 'undefined') setIsConfigError(true);
     }
     setLoading(false);
@@ -162,10 +164,13 @@ export default function AdminDashboard() {
           <div>
             <h3 style={{ fontWeight: 800, marginBottom: '0.25rem' }}>تنبيه بخصوص الربط (Hosting)</h3>
             <p style={{ fontSize: '0.9rem' }}>
-              يبدو أن لوحة التحكم غير مرتبطة بقاعدة البيانات بشكل كامل. إذا كنت تستخدم Vercel، يرجى التأكد من إضافة مفتاح 
-              <code style={{ background: 'rgba(0,0,0,0.1)', padding: '2px 4px', borderRadius: '4px', margin: '0 4px' }}>SUPABASE_SERVICE_ROLE_KEY</code> 
-              في إعدادات المشروع.
+              يبدو أن لوحة التحكم غير مرتبطة بقاعدة البيانات بشكل كامل. يرجى التأكد من إضافة المفاتيح التالية في إعدادات Vercel:
             </p>
+            <ul style={{ fontSize: '0.85rem', marginTop: '0.5rem', listStyle: 'none', padding: 0 }}>
+              {!configStatus.url && <li style={{ color: '#d32f2f' }}>❌ SUPABASE_URL (المحرك الرئيسي)</li>}
+              {!configStatus.anon && <li style={{ color: '#d32f2f' }}>❌ SUPABASE_ANON_KEY (مفتاح التصفح)</li>}
+              {!configStatus.service && <li style={{ color: '#d32f2f' }}>❌ SUPABASE_SERVICE_ROLE_KEY (مفتاح الإدارة الرئيسي)</li>}
+            </ul>
             <a 
               href="https://vercel.com/dashboard" 
               target="_blank" 

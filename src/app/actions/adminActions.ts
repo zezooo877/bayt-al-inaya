@@ -4,8 +4,12 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { Product, SupabaseProductResponse } from '@/types';
 
 export async function adminCheckConfigAction() {
-  const supabaseAdmin = getSupabaseAdmin();
-  return !!supabaseAdmin;
+  const config = {
+    url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    anon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    service: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+  };
+  return config;
 }
 
 export async function adminGetProductsAction() {
